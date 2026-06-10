@@ -22,10 +22,10 @@ export default function ChatPage() {
   const [agents, setAgents] = useState([])
   const [showNewSession, setShowNewSession] = useState(false)
   const [showSidebar, setShowSidebar] = useState(true)
+  const [newSessionKey, setNewSessionKey] = useState(0)
   const [isStreaming, setIsStreaming] = useState(false)
   const [showScrollButton, setShowScrollButton] = useState(false)
-  const [activeAgentId, setActiveAgentId] = useState(null)
-  const [activeAgentContent, setActiveAgentContent] = useState(null)
+  const [activeAgents, setActiveAgents] = useState(new Map()) // agentId -> content
   const [completedAgentIds, setCompletedAgentIds] = useState([])
   const messageListRef = useRef(null)
   const streamingMessageIdRef = useRef(null)
@@ -43,10 +43,8 @@ export default function ChatPage() {
     if (currentSession) {
       loadMessages(currentSession.id)
       setIsStreaming(false)
-      setActiveAgentId(null)
-      setActiveAgentContent(null)
+      setActiveAgents(new Map())
       setCompletedAgentIds([])
-      streamingMessageIdRef.current = null
     }
   }, [currentSession])
 
@@ -113,19 +111,28 @@ export default function ChatPage() {
     if (type === 'streaming') {
       setIsStreaming(true)
 
+      const agentId = data.agentId || data.senderId
+
       // Check if this is a new streaming message (first chunk)
-      const isFirstChunk = !streamingMessageIdRef.current || streamingMessageIdRef.current !== data.id
+      const isFirstChunk = !currentMessages.some(m => m.id === data.id)
+
       if (isFirstChunk) {
-        streamingMessageIdRef.current = data.id
-        setActiveAgentId(data.agentId || data.senderId)
-        setActiveAgentContent('')
-        // Remove from completed when starting new work
-        setCompletedAgentIds(prev => prev.filter(id => id !== data.agentId && id !== data.senderId))
+        // Mark agent as active and remove from completed
+        setActiveAgents(prev => {
+          const newMap = new Map(prev)
+          newMap.set(agentId, '')
+          return newMap
+        })
+        setCompletedAgentIds(prev => prev.filter(id => id !== agentId))
       }
 
-      // Update active agent content for animation
+      // Update active agent content
       if (data.content) {
-        setActiveAgentContent(data.content)
+        setActiveAgents(prev => {
+          const newMap = new Map(prev)
+          newMap.set(agentId, data.content)
+          return newMap
+        })
       }
 
       // Streaming update - update existing agent message or add if first chunk
@@ -140,18 +147,22 @@ export default function ChatPage() {
         }
       }
     } else if (type === 'complete') {
-      // Streaming finished
-      setIsStreaming(false)
-      streamingMessageIdRef.current = null
-
-      // Mark agent as completed
+      // Mark agent as completed and remove from active
       if (data && (data.senderType === 'AGENT' || data.agentId)) {
         const completedId = data.agentId || data.senderId
         if (completedId) {
-          setCompletedAgentIds(prev => [...prev, completedId])
+          setCompletedAgentIds(prev => [...prev.filter(id => id !== completedId), completedId])
+          setActiveAgents(prev => {
+            const newMap = new Map(prev)
+            newMap.delete(completedId)
+            return newMap
+          })
         }
-        setActiveAgentId(null)
-        setActiveAgentContent(null)
+      }
+
+      // Check if all agents are done
+      if (activeAgents.size === 0) {
+        setIsStreaming(false)
       }
 
       // Final completion event - clear tool calls
@@ -181,7 +192,7 @@ export default function ChatPage() {
         }
       }
     }
-  }, [updateMessage, addMessage, clearToolCalls, addToolCall, updateToolCallResult, scrollToStreamingMessage])
+  }, [updateMessage, addMessage, clearToolCalls, addToolCall, updateToolCallResult, scrollToStreamingMessage, activeAgents.size])
 
   const loadInitialData = async () => {
     await Promise.all([fetchSessions(), loadAgents()])
@@ -222,6 +233,22 @@ export default function ChatPage() {
     }
   }
 
+  const handleReply = (messageId, text) => {
+    if (!currentSession) return
+    console.log('Replying to message:', messageId, 'with text:', text)
+    useMessageStore.getState().sendMessage(currentSession.id, text, messageId)
+  }
+
+  const handleRegenerate = (messageId) => {
+    if (!currentSession) return
+    console.log('Regenerating message:', messageId)
+    // For now, just resend the previous message
+    const message = messages.find(m => m.id === messageId)
+    if (message) {
+      useMessageStore.getState().sendMessage(currentSession.id, message.content, null)
+    }
+  }
+
   const { connect, disconnect, isConnected } = useSSE(handleSSEMessage)
 
   useEffect(() => {
@@ -250,7 +277,10 @@ export default function ChatPage() {
           sessions={sessions}
           currentSession={currentSession}
           onSelectSession={setCurrentSession}
-          onNewSession={() => setShowNewSession(true)}
+          onNewSession={() => {
+            setNewSessionKey(k => k + 1)
+            setShowNewSession(true)
+          }}
           onDeleteSession={useSessionStore.getState().deleteSession}
           onPinSession={useSessionStore.getState().pinSession}
           onArchiveSession={useSessionStore.getState().archiveSession}
@@ -313,8 +343,7 @@ export default function ChatPage() {
                 <div className="px-4 pt-4">
                   <AgentActivityIndicator
                     agents={currentSessionAgents}
-                    activeAgentId={activeAgentId}
-                    activeAgentContent={activeAgentContent}
+                    activeAgents={activeAgents}
                     completedAgents={completedAgentIds}
                   />
                 </div>
@@ -324,7 +353,13 @@ export default function ChatPage() {
                 onScroll={handleScroll}
                 className="flex-1 overflow-y-auto"
               >
-                <MessageList messages={messages} onPinMessage={useMessageStore.getState().pinMessage} />
+                <MessageList
+                  messages={messages}
+                  onPinMessage={useMessageStore.getState().pinMessage}
+                  onReply={handleReply}
+                  onRegenerate={handleRegenerate}
+                  onUpdateContext={useMessageStore.getState().updateMessageContext}
+                />
               </div>
               {showScrollButton && (
                 <button
@@ -347,7 +382,10 @@ export default function ChatPage() {
               <div className="text-center px-4">
                 <p className="text-2xl font-bold text-white mb-6">Welcome to AgentHub</p>
                 <button
-                  onClick={() => setShowNewSession(true)}
+                  onClick={() => {
+                    setNewSessionKey(k => k + 1)
+                    setShowNewSession(true)
+                  }}
                   className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors"
                 >
                   Start a new conversation
@@ -360,21 +398,19 @@ export default function ChatPage() {
           {currentSession?.type === 'GROUP' && currentSessionAgents.length > 0 && (
             <AgentStatusSidebar
               agents={currentSessionAgents}
-              activeAgentId={activeAgentId}
-              activeAgentContent={activeAgentContent}
+              activeAgents={activeAgents}
               completedAgentIds={completedAgentIds}
             />
           )}
         </div>
       </div>
 
-      {showNewSession && (
-        <NewSessionModal
-          agents={agents}
-          onClose={() => setShowNewSession(false)}
-          onSubmit={handleNewSession}
-        />
-      )}
+      <NewSessionModalWrapper show={showNewSession} agents={agents} onClose={() => setShowNewSession(false)} onSubmit={handleNewSession} newSessionKey={newSessionKey} />
     </div>
   )
+}
+
+function NewSessionModalWrapper({ show, agents, onClose, onSubmit, newSessionKey }) {
+  if (!show) return null
+  return <NewSessionModal key={newSessionKey} agents={agents} onClose={onClose} onSubmit={onSubmit} />
 }

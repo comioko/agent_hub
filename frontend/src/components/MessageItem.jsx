@@ -229,14 +229,16 @@ function ToolCallCard({ toolCall, result }) {
 }
 
 // Message actions menu
-function MessageActionsMenu({ message, onReply, onQuote, onRegenerate, onApplyDiff, onExpand, onCopy }) {
+function MessageActionsMenu({ message, onReply, onQuote, onRegenerate, onApplyDiff, onExpand, onCopy, onUpdateContext }) {
   const [isOpen, setIsOpen] = useState(false)
+  const [showContextMenu, setShowContextMenu] = useState(false)
   const menuRef = useRef(null)
 
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         setIsOpen(false)
+        setShowContextMenu(false)
       }
     }
     if (isOpen) {
@@ -248,13 +250,22 @@ function MessageActionsMenu({ message, onReply, onQuote, onRegenerate, onApplyDi
   const hasDiff = message.blocks?.some(b => b.blockType === 'DIFF')
   const hasExpandable = message.blocks?.some(b => ['IMAGE', 'WEB_PREVIEW', 'DEPLOY_STATUS'].includes(b.blockType))
 
+  const contextTypes = [
+    { value: 'AUTO', label: '自动', desc: '自动包含在上下文中' },
+    { value: 'PINNED', label: '已固定', desc: '始终作为上下文优先使用' },
+    { value: 'EXCLUDED', label: '已排除', desc: '不参与上下文计算' },
+  ]
+
+  const currentContextType = message.contextType || 'AUTO'
+
   const menuItems = [
-    { label: '回复', icon: '💬', action: onReply, show: true },
-    { label: '引用', icon: '📝', action: onQuote, show: true },
-    { label: '重新生成', icon: '🔄', action: onRegenerate, show: message.senderType !== 'USER' },
-    { label: '复制内容', icon: '📋', action: () => { navigator.clipboard.writeText(message.content); setIsOpen(false) }, show: true },
-    { label: '一键应用Diff', icon: '✅', action: onApplyDiff, show: hasDiff },
-    { label: '展开预览', icon: '🔍', action: onExpand, show: hasExpandable },
+    { label: '回复', icon: '💬', action: () => { console.log('Reply clicked'); onReply?.() }, show: true },
+    { label: '引用', icon: '📝', action: () => { console.log('Quote clicked'); onQuote?.() }, show: true },
+    { label: '重新生成', icon: '🔄', action: () => { console.log('Regenerate clicked'); onRegenerate?.(message.id) }, show: message.senderType !== 'USER' },
+    { label: '复制内容', icon: '📋', action: () => { console.log('Copy clicked'); navigator.clipboard.writeText(message.content); setIsOpen(false) }, show: true },
+    { label: '一键应用Diff', icon: '✅', action: () => { console.log('ApplyDiff clicked'); onApplyDiff?.() }, show: hasDiff },
+    { label: '展开预览', icon: '🔍', action: () => { console.log('Expand clicked'); onExpand?.() }, show: hasExpandable },
+    { label: '上下文管理', icon: '📌', action: () => { console.log('Context clicked'); setShowContextMenu(!showContextMenu) }, show: true, isSubmenu: true },
   ].filter(item => item.show)
 
   return (
@@ -271,14 +282,57 @@ function MessageActionsMenu({ message, onReply, onQuote, onRegenerate, onApplyDi
       {isOpen && (
         <div className="absolute right-0 top-full mt-1 bg-gray-700 rounded-lg shadow-xl border border-gray-600 py-1 min-w-[160px] z-50">
           {menuItems.map((item, idx) => (
-            <button
-              key={idx}
-              onClick={(e) => { e.stopPropagation(); item.action?.(); setIsOpen(false) }}
-              className="w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg-gray-600 flex items-center gap-2 transition"
-            >
-              <span>{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
+            <div key={idx}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  console.log('Menu item clicked:', item.label)
+                  if (!item.isSubmenu) {
+                    item.action?.()
+                    setIsOpen(false)
+                  }
+                }}
+                className="w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg-gray-600 flex items-center gap-2 transition"
+              >
+                <span>{item.icon}</span>
+                <span>{item.label}</span>
+                {item.isSubmenu && (
+                  <svg className="w-4 h-4 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                )}
+              </button>
+              {item.isSubmenu && showContextMenu && (
+                <div className="pl-4 border-l-2 border-gray-600">
+                  {contextTypes.map((ctx) => (
+                    <button
+                      key={ctx.value}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onUpdateContext?.(message.id, ctx.value, ctx.value === 'PINNED' ? 1 : 0)
+                        setIsOpen(false)
+                        setShowContextMenu(false)
+                      }}
+                      className={`w-full px-4 py-2 text-left text-sm flex flex-col gap-0.5 transition ${
+                        currentContextType === ctx.value
+                          ? 'bg-primary-600/30 text-primary-300'
+                          : 'text-gray-200 hover:bg-gray-600'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        {currentContextType === ctx.value && (
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                        {ctx.label}
+                      </span>
+                      <span className="text-xs text-gray-400">{ctx.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -303,7 +357,7 @@ function highlightMentions(children) {
   return children
 }
 
-export default function MessageItem({ message, onPinMessage, onReply, onRegenerate }) {
+export default function MessageItem({ message, onPinMessage, onReply, onRegenerate, onUpdateContext }) {
   const isUser = message.senderType === 'USER'
   const toolCalls = useMessageStore(state => state.toolCallsInProgress.get(message.id) || [])
   const [showHistory, setShowHistory] = useState(false)
@@ -383,6 +437,7 @@ export default function MessageItem({ message, onPinMessage, onReply, onRegenera
               onApplyDiff={handleApplyDiff}
               onExpand={handleExpand}
               onCopy={() => navigator.clipboard.writeText(message.content)}
+              onUpdateContext={onUpdateContext}
             />
           </div>
 

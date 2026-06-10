@@ -121,6 +121,15 @@ export const messageApi = {
     return handleResponse(res)
   },
 
+  async updateMessageContext(messageId, contextType, contextPriority) {
+    const res = await fetch(`${API_BASE}/messages/${messageId}/context`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ contextType, contextPriority })
+    })
+    return handleResponse(res)
+  },
+
   async getMessageVersions(messageId) {
     const res = await fetch(`${API_BASE}/messages/${messageId}/versions`, {
       headers: getAuthHeaders()

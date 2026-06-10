@@ -6,6 +6,12 @@ export function useSSE(onMessage) {
   const reconnectAttempts = useRef(0)
   const maxReconnectAttempts = 3
   const [isConnected, setIsConnected] = useState(false)
+  const onMessageRef = useRef(onMessage)
+
+  // Keep onMessage ref up to date
+  useEffect(() => {
+    onMessageRef.current = onMessage
+  }, [onMessage])
 
   const connect = useCallback(() => {
     const token = localStorage.getItem('agenthub_token')
@@ -40,8 +46,8 @@ export function useSSE(onMessage) {
       eventSource.addEventListener('streaming', (event) => {
         try {
           const data = JSON.parse(event.data)
-          if (data && onMessage) {
-            onMessage({ type: 'streaming', data })
+          if (data && onMessageRef.current) {
+            onMessageRef.current({ type: 'streaming', data })
           }
         } catch (e) {
           console.error('Failed to parse streaming event:', e)
@@ -51,8 +57,8 @@ export function useSSE(onMessage) {
       eventSource.addEventListener('complete', (event) => {
         try {
           const data = JSON.parse(event.data)
-          if (data && onMessage) {
-            onMessage({ type: 'complete', data })
+          if (data && onMessageRef.current) {
+            onMessageRef.current({ type: 'complete', data })
           }
         } catch (e) {
           console.error('Failed to parse complete event:', e)
@@ -62,8 +68,8 @@ export function useSSE(onMessage) {
       eventSource.addEventListener('tool_call', (event) => {
         try {
           const data = JSON.parse(event.data)
-          if (data && onMessage) {
-            onMessage({ type: 'tool_call', data })
+          if (data && onMessageRef.current) {
+            onMessageRef.current({ type: 'tool_call', data })
           }
         } catch (e) {
           console.error('Failed to parse tool_call event:', e)
@@ -73,8 +79,8 @@ export function useSSE(onMessage) {
       eventSource.addEventListener('tool_result', (event) => {
         try {
           const data = JSON.parse(event.data)
-          if (data && onMessage) {
-            onMessage({ type: 'tool_result', data })
+          if (data && onMessageRef.current) {
+            onMessageRef.current({ type: 'tool_result', data })
           }
         } catch (e) {
           console.error('Failed to parse tool_result event:', e)
@@ -88,8 +94,8 @@ export function useSSE(onMessage) {
             return
           }
           const data = JSON.parse(event.data)
-          if (data && onMessage) {
-            onMessage({ type: 'message', data })
+          if (data && onMessageRef.current) {
+            onMessageRef.current({ type: 'message', data })
           }
         } catch (e) {
           console.log('SSE message received:', event.data)
@@ -117,7 +123,7 @@ export function useSSE(onMessage) {
 
       eventSourceRef.current = eventSource
     })
-  }, [onMessage])
+  }, [])
 
   const disconnect = useCallback(() => {
     if (eventSourceRef.current) {

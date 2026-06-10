@@ -18,6 +18,8 @@ public class Message {
     private Long parentId;
     private Boolean pinned = false;
     private String status;  // PENDING, STREAMING, COMPLETED, FAILED
+    private String contextType = "AUTO";  // AUTO, PINNED, EXCLUDED
+    private Integer contextPriority = 0;  // Higher = more important for long-term context
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

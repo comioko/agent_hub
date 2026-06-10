@@ -16,6 +16,8 @@ public class MessageBlock {
     private String language;
     private String metadata;
     private Integer sortOrder;
+    private String contextType = "AUTO";  // AUTO, PINNED, EXCLUDED
+    private Integer contextPriority = 0;  // Higher = more important for long-term context
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

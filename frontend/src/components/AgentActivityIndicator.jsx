@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { AgentAvatar, getInitials, stringToColor } from './AgentStatusSidebar'
 
-export default function AgentActivityIndicator({ agents, activeAgentId, activeAgentContent, completedAgents = [] }) {
+export default function AgentActivityIndicator({ agents, activeAgents, completedAgents = [] }) {
+  // activeAgents is a Map: agentId -> content
+  const activeAgentIds = activeAgents ? Array.from(activeAgents.keys()) : []
   const [progress, setProgress] = useState(0)
 
   useEffect(() => {
-    if (activeAgentId && activeAgentContent) {
+    if (activeAgentIds.length > 0) {
       const timer = setTimeout(() => {
         setProgress(prev => {
           const newProgress = prev + Math.random() * 15
@@ -16,13 +18,12 @@ export default function AgentActivityIndicator({ agents, activeAgentId, activeAg
     } else {
       setProgress(0)
     }
-  }, [activeAgentContent, activeAgentId])
+  }, [activeAgents, activeAgentIds.length])
 
   if (!agents || agents.length === 0) return null
 
-  const activeAgent = agents.find(a => a.id === activeAgentId)
   const idleAgents = agents.filter(a =>
-    a.id !== activeAgentId && !completedAgents.includes(a.id)
+    !activeAgentIds.includes(a.id) && !completedAgents.includes(a.id)
   )
 
   return (
@@ -31,35 +32,43 @@ export default function AgentActivityIndicator({ agents, activeAgentId, activeAg
       <div className="flex items-center gap-2 mb-1.5">
         <span className="text-xs">🎭</span>
         <span className="text-xs font-medium text-gray-400">Agent 状态</span>
-        {activeAgentId && (
+        {activeAgentIds.length > 0 && (
           <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-xs animate-pulse">
-            进行中
+            进行中 ({activeAgentIds.length})
           </span>
         )}
       </div>
 
-      {/* Active agent - compact */}
-      {activeAgent && (
-        <div className="flex items-center gap-2">
-          <AgentAvatar agent={activeAgent} size="sm" showStatus={true} isActive={true} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1">
-              <span className="text-xs font-medium text-white truncate">{activeAgent.name}</span>
-              <span className="text-xs">{activeAgentContent ? '✍️' : '🤔'}</span>
-            </div>
-            <div className="h-0.5 bg-gray-700 rounded-full mt-0.5 overflow-hidden">
-              <div
-                className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
+      {/* Active agents - compact */}
+      {activeAgentIds.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {activeAgentIds.map(agentId => {
+            const agent = agents.find(a => a.id === agentId)
+            const content = activeAgents.get(agentId)
+            return (
+              <div key={agentId} className="flex items-center gap-2">
+                <AgentAvatar agent={agent} size="sm" showStatus={true} isActive={true} />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-medium text-white truncate">{agent?.name}</span>
+                    <span className="text-xs">{content ? '✍️' : '🤔'}</span>
+                  </div>
+                  <div className="h-0.5 bg-gray-700 rounded-full mt-0.5 overflow-hidden w-20">
+                    <div
+                      className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
       {/* Idle agents - compact horizontal */}
-      {!activeAgent && idleAgents.length > 0 && (
-        <div className="flex items-center gap-1.5">
+      {activeAgentIds.length === 0 && idleAgents.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-xs text-gray-500">等待:</span>
           {idleAgents.slice(0, 4).map(agent => (
             <div
@@ -75,7 +84,7 @@ export default function AgentActivityIndicator({ agents, activeAgentId, activeAg
 
       {/* Completed */}
       {completedAgents.length > 0 && (
-        <div className="flex items-center gap-1 mt-1">
+        <div className="flex items-center gap-1 mt-1 flex-wrap">
           <span className="text-xs text-green-400">✅</span>
           {completedAgents.map(id => {
             const agent = agents.find(a => a.id === id)

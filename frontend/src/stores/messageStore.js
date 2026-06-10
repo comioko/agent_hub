@@ -111,5 +111,19 @@ export const useMessageStore = create((set, get) => ({
       set({ error: error.message })
       throw error
     }
+  },
+
+  updateMessageContext: async (messageId, contextType, contextPriority) => {
+    try {
+      await messageApi.updateMessageContext(messageId, contextType, contextPriority)
+      set((state) => ({
+        messages: state.messages.map(m =>
+          m.id === messageId ? { ...m, contextType, contextPriority } : m
+        )
+      }))
+    } catch (error) {
+      set({ error: error.message })
+      throw error
+    }
   }
 }))

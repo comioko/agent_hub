@@ -127,7 +127,7 @@ public class GroupAgentHandler {
             // Build instructions for supervisor with available agents
             String availableAgents = buildAvailableAgentsInfo(participants);
             String supervisorInstructions = String.format(
-                "你是团队的主管 (Orchestrator)。\n\n可用子代理:\n%s\n\n规则:\n1. 只能使用上述列表中的代理名称进行 @ 委托\n2. 每个 @代理名 必须精确匹配列表中的名称\n3. 分解任务后使用 @代理名 委托给子代理\n4. 等待子代理完成后汇总结果\n5. 你必须实际委托任务给子代理，不要只输出计划\n\n用户需求:\n%s",
+                "你是团队的主管 (Orchestrator)。\n\n可用子代理:\n%s\n\n规则:\n1. 只能使用上述列表中的代理名称进行 @ 委托\n2. 每个 @代理名 必须精确匹配列表中的名称\n3. 分解任务后使用 @代理名 委托给子代理\n4. 等待子代理完成后汇总结果\n5. 你必须实际委托任务给子代理，不要只输出计划\n6. 用户只跟你对话，不要直接回答用户的问题，而是分解任务后委托给子代理\n\n用户需求:\n%s",
                 availableAgents, userMessage.getContent());
 
             // Pass full instructions as content (not in delegation context to avoid duplication)
@@ -144,27 +144,36 @@ public class GroupAgentHandler {
 
             // Process any handoffs from supervisor
             if (!pendingHandoffs.isEmpty()) {
+                // Remove supervisor from processed agents so sub-agents can be delegated
+                processedAgents.remove(supervisor.getName().toLowerCase());
                 processHandoffs(pendingHandoffs, processedAgents, userMessage, userId, messageIds, sendStreamingUpdate);
             }
         } else if (pendingHandoffs.isEmpty()) {
-            // No @mentions and no supervisor - call all agents
-            log.debug("No @mentions in user message, calling all agents");
-            for (Agent agent : participants) {
-                String response = callAgentSync(userId, agent, userMessage.getContent(), userMessage, messageIds, sendStreamingUpdate);
-                // Check if agent's response contains @mentions for further handoff
-                Map<String, String> agentMentions = detectMentionsInText(response, participants);
-                for (Map.Entry<String, String> entry : agentMentions.entrySet()) {
-                    if (!processedAgents.contains(entry.getKey().toLowerCase())) {
-                        pendingHandoffs.put(entry.getKey(), entry.getValue());
+            // No @mentions in user message
+            // When there's NO supervisor, call all agents (legacy behavior)
+            // When there IS a supervisor but user @mentioned specific agent(s), process those mentions
+            if (supervisor == null) {
+                log.debug("No @mentions in user message, calling all agents");
+                for (Agent agent : participants) {
+                    String response = callAgentSync(userId, agent, userMessage.getContent(), userMessage, messageIds, sendStreamingUpdate);
+                    // Check if agent's response contains @mentions for further handoff
+                    Map<String, String> agentMentions = detectMentionsInText(response, participants);
+                    for (Map.Entry<String, String> entry : agentMentions.entrySet()) {
+                        if (!processedAgents.contains(entry.getKey().toLowerCase())) {
+                            pendingHandoffs.put(entry.getKey(), entry.getValue());
+                        }
                     }
+                    processedAgents.add(agent.getName().toLowerCase());
                 }
-                processedAgents.add(agent.getName().toLowerCase());
-            }
 
-            // Process any handoffs from agents
-            if (!pendingHandoffs.isEmpty()) {
-                processHandoffs(pendingHandoffs, processedAgents, userMessage, userId, messageIds, sendStreamingUpdate);
+                // Process any handoffs from agents
+                if (!pendingHandoffs.isEmpty()) {
+                    processHandoffs(pendingHandoffs, processedAgents, userMessage, userId, messageIds, sendStreamingUpdate);
+                }
             }
+            // When there IS a supervisor but no @mentions, supervisor should have been called above
+            // If we reach here, it means supervisor mode was not triggered - do nothing (or call supervisor as fallback)
+            log.debug("No @mentions and no supervisor - no action taken in group chat");
         } else {
             // Process @mentions
             processHandoffs(pendingHandoffs, processedAgents, userMessage, userId, messageIds, sendStreamingUpdate);
@@ -579,14 +588,48 @@ public class GroupAgentHandler {
     }
 
     private List<Message> loadConversationHistory(Long conversationId, int limit) {
-        LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Message::getConversationId, conversationId)
-            .orderByDesc(Message::getCreatedAt)
-            .last("LIMIT " + limit);
-        List<Message> messages = messageMapper.selectList(wrapper);
-        // Reverse to get chronological order
-        Collections.reverse(messages);
-        return messages;
+        // Smart context selection: prioritize pinned messages, then recent AUTO messages
+        // Skip EXCLUDED messages
+
+        // 1. Get all PINNED messages first (ordered by priority descending)
+        LambdaQueryWrapper<Message> pinnedWrapper = new LambdaQueryWrapper<>();
+        pinnedWrapper.eq(Message::getConversationId, conversationId)
+            .eq(Message::getContextType, "PINNED")
+            .orderByDesc(Message::getContextPriority)
+            .orderByAsc(Message::getId);
+        List<Message> pinnedMessages = messageMapper.selectList(pinnedWrapper);
+
+        // 2. Get AUTO messages (most recent first), excluding the current message
+        LambdaQueryWrapper<Message> autoWrapper = new LambdaQueryWrapper<>();
+        autoWrapper.eq(Message::getConversationId, conversationId)
+            .eq(Message::getContextType, "AUTO")
+            .orderByDesc(Message::getId);
+        List<Message> autoMessages = messageMapper.selectList(autoWrapper);
+
+        // Skip the last message (current one being processed)
+        if (autoMessages.size() > 1) {
+            autoMessages = autoMessages.subList(0, autoMessages.size() - 1);
+        } else {
+            autoMessages = new ArrayList<>();
+        }
+
+        // 3. Build final context: pinned first, then fill with recent AUTO up to limit
+        List<Message> result = new ArrayList<>();
+        result.addAll(pinnedMessages);
+
+        int remainingSlots = limit - result.size();
+        if (remainingSlots > 0 && !autoMessages.isEmpty()) {
+            // Take the most recent AUTO messages
+            int takeCount = Math.min(remainingSlots, autoMessages.size());
+            // Reverse to get chronological order (autoMessages is ordered by id desc)
+            List<Message> recentAuto = autoMessages.subList(0, takeCount);
+            Collections.reverse(recentAuto);
+            result.addAll(recentAuto);
+        }
+
+        log.debug("Retrieved {} history messages for conversation {} ({} pinned, {} auto)",
+            result.size(), conversationId, pinnedMessages.size(), Math.min(limit - pinnedMessages.size(), autoMessages.size()));
+        return result;
     }
 
     /**

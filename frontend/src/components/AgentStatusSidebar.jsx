@@ -125,7 +125,7 @@ function AgentStatusCard({ agent, isActive, isCompleted, taskContent }) {
   )
 }
 
-export default function AgentStatusSidebar({ agents, activeAgentId, activeAgentContent, completedAgentIds }) {
+export default function AgentStatusSidebar({ agents, activeAgents, completedAgentIds }) {
   const [expandedId, setExpandedId] = useState(null)
 
   if (!agents || agents.length === 0) {
@@ -137,10 +137,11 @@ export default function AgentStatusSidebar({ agents, activeAgentId, activeAgentC
     )
   }
 
-  const activeAgent = agents.find(a => a.id === activeAgentId)
+  // activeAgents is a Map: agentId -> content
+  const activeAgentIds = activeAgents ? Array.from(activeAgents.keys()) : []
   const completedAgents = agents.filter(a => completedAgentIds?.includes(a.id))
   const idleAgents = agents.filter(a =>
-    a.id !== activeAgentId && !completedAgentIds?.includes(a.id)
+    !activeAgentIds.includes(a.id) && !completedAgentIds?.includes(a.id)
   )
 
   return (
@@ -158,16 +159,25 @@ export default function AgentStatusSidebar({ agents, activeAgentId, activeAgentC
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {/* Active agent */}
-        {activeAgent && (
+        {/* Active agents */}
+        {activeAgentIds.length > 0 && (
           <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">执行中</p>
-            <AgentStatusCard
-              agent={activeAgent}
-              isActive={true}
-              isCompleted={false}
-              taskContent={activeAgentContent}
-            />
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">执行中 ({activeAgentIds.length})</p>
+            <div className="space-y-2">
+              {activeAgentIds.map(agentId => {
+                const agent = agents.find(a => a.id === agentId)
+                const content = activeAgents.get(agentId)
+                return (
+                  <AgentStatusCard
+                    key={agentId}
+                    agent={agent}
+                    isActive={true}
+                    isCompleted={false}
+                    taskContent={content}
+                  />
+                )
+              })}
+            </div>
           </div>
         )}
 
@@ -209,7 +219,7 @@ export default function AgentStatusSidebar({ agents, activeAgentId, activeAgentC
       {/* Footer with quick stats */}
       <div className="p-3 border-t border-gray-700">
         <div className="flex justify-between text-xs text-gray-500">
-          <span>活跃: {activeAgent ? 1 : 0}</span>
+          <span>活跃: {activeAgentIds.length}</span>
           <span>完成: {completedAgents.length}</span>
           <span>等待: {idleAgents.length}</span>
         </div>

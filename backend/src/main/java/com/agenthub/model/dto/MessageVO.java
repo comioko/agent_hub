@@ -22,6 +22,8 @@ public class MessageVO {
     private Long parentId;
     private Boolean pinned = false;
     private String status;
+    private String contextType;  // AUTO, PINNED, EXCLUDED
+    private Integer contextPriority;  // Higher = more important for long-term context
     private LocalDateTime createdAt;
     private List<MessageBlockVO> blocks;
 

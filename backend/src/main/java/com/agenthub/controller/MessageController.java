@@ -56,6 +56,24 @@ public class MessageController {
         return ResponseEntity.ok(ApiResponse.success("Message pinned", null));
     }
 
+    @PutMapping("/{messageId}/context")
+    public ResponseEntity<ApiResponse<Void>> updateMessageContext(
+            @PathVariable Long messageId,
+            @RequestBody UpdateContextRequest request,
+            @AuthenticationPrincipal User currentUser) {
+        messageService.updateMessageContext(messageId, currentUser.getId(), request.getContextType(), request.getContextPriority());
+        return ResponseEntity.ok(ApiResponse.success("Context updated", null));
+    }
+
+    public static class UpdateContextRequest {
+        private String contextType;
+        private Integer contextPriority;
+        public String getContextType() { return contextType; }
+        public void setContextType(String contextType) { this.contextType = contextType; }
+        public Integer getContextPriority() { return contextPriority; }
+        public void setContextPriority(Integer contextPriority) { this.contextPriority = contextPriority; }
+    }
+
     @GetMapping("/conversation/{conversationId}/pinned")
     public ResponseEntity<ApiResponse<List<MessageVO>>> getPinnedMessages(
             @PathVariable Long conversationId,

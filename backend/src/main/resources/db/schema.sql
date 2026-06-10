@@ -69,9 +69,14 @@ CREATE TABLE IF NOT EXISTS `message` (
                                          `content` TEXT NOT NULL,
                                          `message_type` VARCHAR(20) DEFAULT 'TEXT',
                                          `parent_id` BIGINT,
+                                         `pinned` BOOLEAN DEFAULT FALSE,
+                                         `status` VARCHAR(20),
+                                         `context_type` VARCHAR(20) DEFAULT 'AUTO' COMMENT 'Context type: AUTO, PINNED, EXCLUDED',
+                                         `context_priority` INT DEFAULT 0 COMMENT 'Context priority for long-term memory',
                                          `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                                          INDEX `idx_conv_time` (`conversation_id`, `created_at`),
                                          INDEX `idx_sender` (`sender_id`),
+                                         INDEX `idx_message_context` (`conversation_id`, `context_type`, `id`),
                                          FOREIGN KEY (`conversation_id`) REFERENCES `conversation`(`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -84,6 +89,8 @@ CREATE TABLE IF NOT EXISTS `message_block` (
                                                `language` VARCHAR(50),
                                                `metadata` TEXT,
                                                `sort_order` INT DEFAULT 0,
+                                               `context_type` VARCHAR(20) DEFAULT 'AUTO' COMMENT 'Context type: AUTO, PINNED, EXCLUDED',
+                                               `context_priority` INT DEFAULT 0 COMMENT 'Context priority for long-term memory',
                                                `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                                                INDEX `idx_message` (`message_id`),
                                                FOREIGN KEY (`message_id`) REFERENCES `message`(`id`)

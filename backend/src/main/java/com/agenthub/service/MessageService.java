@@ -531,18 +531,48 @@ public class MessageService {
     }
 
     private List<Message> getConversationHistory(Long conversationId, int limit) {
-        LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Message::getConversationId, conversationId)
+        // Smart context selection: prioritize pinned messages, then recent AUTO messages
+        // Skip EXCLUDED messages
+
+        // 1. Get all PINNED messages first (ordered by priority descending)
+        LambdaQueryWrapper<Message> pinnedWrapper = new LambdaQueryWrapper<>();
+        pinnedWrapper.eq(Message::getConversationId, conversationId)
+            .eq(Message::getContextType, "PINNED")
+            .orderByDesc(Message::getContextPriority)
             .orderByAsc(Message::getId);
-        List<Message> messages = messageMapper.selectList(wrapper);
-        // Skip the last message (current one being processed) and take up to 'limit' messages
-        if (messages.size() > 1) {
-            messages = messages.subList(0, Math.min(messages.size() - 1, limit));
+        List<Message> pinnedMessages = messageMapper.selectList(pinnedWrapper);
+
+        // 2. Get AUTO messages (most recent first), excluding the current message
+        LambdaQueryWrapper<Message> autoWrapper = new LambdaQueryWrapper<>();
+        autoWrapper.eq(Message::getConversationId, conversationId)
+            .eq(Message::getContextType, "AUTO")
+            .orderByDesc(Message::getId);
+        List<Message> autoMessages = messageMapper.selectList(autoWrapper);
+
+        // Skip the last message (current one being processed)
+        if (autoMessages.size() > 1) {
+            autoMessages = autoMessages.subList(0, autoMessages.size() - 1);
         } else {
-            messages = new ArrayList<>();
+            autoMessages = new ArrayList<>();
         }
-        log.debug("Retrieved {} history messages for conversation {}", messages.size(), conversationId);
-        return messages;
+
+        // 3. Build final context: pinned first, then fill with recent AUTO up to limit
+        List<Message> result = new ArrayList<>();
+        result.addAll(pinnedMessages);
+
+        int remainingSlots = limit - result.size();
+        if (remainingSlots > 0 && !autoMessages.isEmpty()) {
+            // Take the most recent AUTO messages
+            int takeCount = Math.min(remainingSlots, autoMessages.size());
+            // Reverse to get most recent (autoMessages is ordered by id desc)
+            List<Message> recentAuto = autoMessages.subList(0, takeCount);
+            Collections.reverse(recentAuto);
+            result.addAll(recentAuto);
+        }
+
+        log.debug("Retrieved {} history messages for conversation {} ({} pinned, {} auto)",
+            result.size(), conversationId, pinnedMessages.size(), Math.min(limit - pinnedMessages.size(), autoMessages.size()));
+        return result;
     }
 
     private void updateConversationTimestampAndTitle(Long conversationId, String firstMessage) {
@@ -587,6 +617,8 @@ public class MessageService {
         vo.setParentId(message.getParentId());
         vo.setPinned(message.getPinned() != null ? message.getPinned() : false);
         vo.setStatus(message.getStatus());
+        vo.setContextType(message.getContextType());
+        vo.setContextPriority(message.getContextPriority());
         vo.setCreatedAt(message.getCreatedAt());
 
         if (SenderType.USER.name().equals(message.getSenderType())) {
@@ -637,6 +669,34 @@ public class MessageService {
         }
 
         message.setPinned(pinned);
+        messageMapper.updateById(message);
+    }
+
+    @Transactional
+    public void updateMessageContext(Long messageId, Long userId, String contextType, Integer contextPriority) {
+        Message message = messageMapper.selectById(messageId);
+        if (message == null) {
+            throw new BusinessException(HttpStatus.NOT_FOUND, "Message not found");
+        }
+
+        // Verify user has access to this conversation
+        LambdaQueryWrapper<ConversationParticipant> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ConversationParticipant::getConversationId, message.getConversationId())
+            .eq(ConversationParticipant::getUserId, userId);
+        if (participantMapper.selectCount(wrapper) == 0) {
+            throw new BusinessException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+
+        // Validate contextType
+        if (contextType != null && !contextType.isEmpty()) {
+            if (!contextType.equals("AUTO") && !contextType.equals("PINNED") && !contextType.equals("EXCLUDED")) {
+                throw new BusinessException(HttpStatus.BAD_REQUEST, "Invalid contextType. Must be AUTO, PINNED, or EXCLUDED");
+            }
+            message.setContextType(contextType);
+        }
+        if (contextPriority != null) {
+            message.setContextPriority(contextPriority);
+        }
         messageMapper.updateById(message);
     }
 
