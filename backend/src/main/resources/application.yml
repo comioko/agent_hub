@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: agenthub-backend
+  config:
+    import: optional:file:./application-local.yml
 
   datasource:
     url: jdbc:mysql://localhost:3306/agent_hub?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
@@ -67,6 +69,13 @@ deepseek:
     key: ${DEEPSEEK_API_KEY:}
     base: ${DEEPSEEK_API_BASE:https://api.deepseek.com/v1}
   model: ${DEEPSEEK_MODEL:deepseek-v4-flash}
+
+volcano:
+  api:
+    key: ${VOLCANO_API_KEY:}
+    base: ${VOLCANO_API_BASE:https://ark.cn-beijing.volces.com/api/v3}
+  endpoint: ${VOLCANO_ENDPOINT_ID:ep-20260508214225-g6x7g}
+  model: ${VOLCANO_MODEL:doubao-pro-32k}
 
 logging:
   level:

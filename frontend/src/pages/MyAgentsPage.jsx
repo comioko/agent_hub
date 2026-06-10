@@ -16,7 +16,8 @@ export default function MyAgentsPage() {
     systemPrompt: '',
     provider: 'BUILTIN',
     providerModel: 'builtin',
-    enabled: true
+    enabled: true,
+    isOrchestrator: false
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -61,7 +62,8 @@ export default function MyAgentsPage() {
         systemPrompt: '',
         provider: 'BUILTIN',
         providerModel: 'builtin',
-        enabled: true
+        enabled: true,
+        isOrchestrator: false
       })
       loadMyAgents()
     } catch (err) {
@@ -79,7 +81,8 @@ export default function MyAgentsPage() {
       systemPrompt: agent.systemPrompt || '',
       provider: agent.provider || 'BUILTIN',
       providerModel: agent.providerModel || 'builtin',
-      enabled: agent.enabled !== false
+      enabled: agent.enabled !== false,
+      isOrchestrator: agent.isOrchestrator === true
     })
     setShowForm(true)
   }
@@ -104,7 +107,8 @@ export default function MyAgentsPage() {
       systemPrompt: '',
       provider: 'BUILTIN',
       providerModel: 'builtin',
-      enabled: true
+      enabled: true,
+      isOrchestrator: false
     })
   }
 
@@ -177,6 +181,11 @@ export default function MyAgentsPage() {
                       }`}>
                         {agent.enabled ? 'Enabled' : 'Disabled'}
                       </span>
+                      {agent.isOrchestrator && (
+                        <span className="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400">
+                          Orchestrator
+                        </span>
+                      )}
                     </div>
                     {agent.description && (
                       <p className="text-gray-400 text-sm mt-1">{agent.description}</p>
@@ -278,6 +287,8 @@ export default function MyAgentsPage() {
                     <option value="MINIMAX">MiniMax</option>
                     <option value="OPENAI">OpenAI</option>
                     <option value="ANTHROPIC">Anthropic</option>
+                    <option value="VOLCANO">Volcano (Doubao)</option>
+                    <option value="CLI">Claude Code CLI</option>
                   </select>
                 </div>
 
@@ -290,7 +301,7 @@ export default function MyAgentsPage() {
                     value={formData.providerModel}
                     onChange={(e) => setFormData({ ...formData, providerModel: e.target.value })}
                     className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-primary-500"
-                    placeholder="e.g., gpt-4, claude-3"
+                    placeholder="e.g., gpt-4, claude-3, doubao-pro-32k"
                   />
                 </div>
               </div>
@@ -305,6 +316,19 @@ export default function MyAgentsPage() {
                 />
                 <label htmlFor="enabled" className="text-sm text-gray-300">
                   Enabled (visible and usable)
+                </label>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="isOrchestrator"
+                  checked={formData.isOrchestrator}
+                  onChange={(e) => setFormData({ ...formData, isOrchestrator: e.target.checked })}
+                  className="w-4 h-4 rounded bg-gray-700 border-gray-600 text-purple-600 focus:ring-purple-500"
+                />
+                <label htmlFor="isOrchestrator" className="text-sm text-gray-300">
+                  Orchestrator (acts as supervisor, can delegate tasks to other agents)
                 </label>
               </div>
 

@@ -10,17 +10,23 @@ import MessageList from '../components/MessageList'
 import MessageInput from '../components/MessageInput'
 import NewSessionModal from '../components/NewSessionModal'
 import AgentBadge from '../components/AgentBadge'
+import AgentActivityIndicator from '../components/AgentActivityIndicator'
+import AgentStatusSidebar from '../components/AgentStatusSidebar'
+import { AgentAvatar } from '../components/AgentStatusSidebar'
 
 export default function ChatPage() {
   const navigate = useNavigate()
   const { user, token, logout } = useAuthStore()
-  const { sessions, currentSession, fetchSessions, setCurrentSession } = useSessionStore()
+  const { sessions, currentSession, currentSessionAgents, fetchSessions, setCurrentSession } = useSessionStore()
   const { messages, fetchMessages, addMessage, updateMessage, addToolCall, updateToolCallResult, clearToolCalls } = useMessageStore()
   const [agents, setAgents] = useState([])
   const [showNewSession, setShowNewSession] = useState(false)
   const [showSidebar, setShowSidebar] = useState(true)
   const [isStreaming, setIsStreaming] = useState(false)
   const [showScrollButton, setShowScrollButton] = useState(false)
+  const [activeAgentId, setActiveAgentId] = useState(null)
+  const [activeAgentContent, setActiveAgentContent] = useState(null)
+  const [completedAgentIds, setCompletedAgentIds] = useState([])
   const messageListRef = useRef(null)
   const streamingMessageIdRef = useRef(null)
   const lastMessageCountRef = useRef(0)
@@ -37,6 +43,9 @@ export default function ChatPage() {
     if (currentSession) {
       loadMessages(currentSession.id)
       setIsStreaming(false)
+      setActiveAgentId(null)
+      setActiveAgentContent(null)
+      setCompletedAgentIds([])
       streamingMessageIdRef.current = null
     }
   }, [currentSession])
@@ -108,6 +117,15 @@ export default function ChatPage() {
       const isFirstChunk = !streamingMessageIdRef.current || streamingMessageIdRef.current !== data.id
       if (isFirstChunk) {
         streamingMessageIdRef.current = data.id
+        setActiveAgentId(data.agentId || data.senderId)
+        setActiveAgentContent('')
+        // Remove from completed when starting new work
+        setCompletedAgentIds(prev => prev.filter(id => id !== data.agentId && id !== data.senderId))
+      }
+
+      // Update active agent content for animation
+      if (data.content) {
+        setActiveAgentContent(data.content)
       }
 
       // Streaming update - update existing agent message or add if first chunk
@@ -125,6 +143,17 @@ export default function ChatPage() {
       // Streaming finished
       setIsStreaming(false)
       streamingMessageIdRef.current = null
+
+      // Mark agent as completed
+      if (data && (data.senderType === 'AGENT' || data.agentId)) {
+        const completedId = data.agentId || data.senderId
+        if (completedId) {
+          setCompletedAgentIds(prev => [...prev, completedId])
+        }
+        setActiveAgentId(null)
+        setActiveAgentContent(null)
+      }
+
       // Final completion event - clear tool calls
       if (data && data.senderType === 'AGENT') {
         updateMessage(data.id, { content: data.content })
@@ -263,7 +292,10 @@ export default function ChatPage() {
               </svg>
               Agent Tasks
             </button>
-            <span className="text-gray-400 text-sm">{user?.username}</span>
+            <div className="flex items-center gap-2">
+              <AgentAvatar agent={{ name: user?.username }} size="sm" showStatus={false} />
+              <span className="text-gray-400 text-sm">{user?.username}</span>
+            </div>
             <button
               onClick={handleLogout}
               className="text-gray-400 hover:text-white text-sm"
@@ -273,9 +305,20 @@ export default function ChatPage() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-hidden relative">
+        <div className="flex-1 overflow-hidden relative flex">
           {currentSession ? (
-            <div className="h-full flex flex-col">
+            <div className="h-full flex flex-col flex-1">
+              {/* Agent activity indicator for group chat */}
+              {currentSession.type === 'GROUP' && currentSessionAgents.length > 0 && (
+                <div className="px-4 pt-4">
+                  <AgentActivityIndicator
+                    agents={currentSessionAgents}
+                    activeAgentId={activeAgentId}
+                    activeAgentContent={activeAgentContent}
+                    completedAgents={completedAgentIds}
+                  />
+                </div>
+              )}
               <div
                 ref={messageListRef}
                 onScroll={handleScroll}
@@ -294,20 +337,33 @@ export default function ChatPage() {
                   <span className="text-sm">回到底部</span>
                 </button>
               )}
-              <MessageInput onSend={handleSendMessage} agents={agents} />
+              <MessageInput
+                onSend={handleSendMessage}
+                agents={currentSession?.type === 'GROUP' ? currentSessionAgents : agents}
+              />
             </div>
           ) : (
-            <div className="h-full flex items-center justify-center text-gray-500">
-              <div className="text-center">
-                <p className="text-xl mb-4">Welcome to AgentHub</p>
+            <div className="h-full w-full flex items-center justify-center text-gray-500">
+              <div className="text-center px-4">
+                <p className="text-2xl font-bold text-white mb-6">Welcome to AgentHub</p>
                 <button
                   onClick={() => setShowNewSession(true)}
-                  className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"
+                  className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors"
                 >
                   Start a new conversation
                 </button>
               </div>
             </div>
+          )}
+
+          {/* Agent Status Sidebar - only show for GROUP chat */}
+          {currentSession?.type === 'GROUP' && currentSessionAgents.length > 0 && (
+            <AgentStatusSidebar
+              agents={currentSessionAgents}
+              activeAgentId={activeAgentId}
+              activeAgentContent={activeAgentContent}
+              completedAgentIds={completedAgentIds}
+            />
           )}
         </div>
       </div>

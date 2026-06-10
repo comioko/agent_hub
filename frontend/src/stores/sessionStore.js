@@ -4,10 +4,21 @@ import { sessionApi } from '../api/agenthub'
 export const useSessionStore = create((set, get) => ({
   sessions: [],
   currentSession: null,
+  currentSessionAgents: [],
   loading: false,
   error: null,
 
-  setCurrentSession: (session) => set({ currentSession: session }),
+  setCurrentSession: (session) => {
+    // Extract agent participants from the session
+    const agentParticipants = session?.participants?.filter(p => p.agentId) || []
+    const agents = agentParticipants.map(p => ({
+      id: p.agentId,
+      name: p.name,
+      avatarUrl: p.avatarUrl,
+      type: p.type
+    }))
+    set({ currentSession: session, currentSessionAgents: agents })
+  },
 
   fetchSessions: async () => {
     set({ loading: true, error: null })

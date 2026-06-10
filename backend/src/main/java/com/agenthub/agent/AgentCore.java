@@ -8,6 +8,7 @@ import com.agenthub.adapter.OpenAIAdapter;
 import com.agenthub.adapter.ClaudeAdapter;
 import com.agenthub.adapter.MiniMaxAdapter;
 import com.agenthub.adapter.DeepSeekAdapter;
+import com.agenthub.adapter.VolcanoAdapter;
 import com.agenthub.adapter.CliAgentAdapter;
 import reactor.core.publisher.Flux;
 import org.slf4j.Logger;
@@ -30,12 +31,14 @@ public class AgentCore {
                      ClaudeAdapter claudeAdapter,
                      MiniMaxAdapter miniMaxAdapter,
                      DeepSeekAdapter deepSeekAdapter,
+                     VolcanoAdapter volcanoAdapter,
                      CliAgentAdapter cliAgentAdapter) {
         adapters.put("BUILTIN", builtinAgentAdapter);
         adapters.put("OPENAI", openAIAdapter);
         adapters.put("ANTHROPIC", claudeAdapter);
         adapters.put("MINIMAX", miniMaxAdapter);
         adapters.put("DEEPSEEK", deepSeekAdapter);
+        adapters.put("VOLCANO", volcanoAdapter);
 
         if (cliAgentAdapter != null) {
             cliAdapters.put(cliAgentAdapter.getCliPath(), cliAgentAdapter);

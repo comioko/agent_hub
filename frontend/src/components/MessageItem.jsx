@@ -5,6 +5,7 @@ import CodeBlock from './CodeBlock'
 import ArtifactRenderer from './ArtifactCards/ArtifactRenderer'
 import { useMessageStore } from '../stores/messageStore'
 import { messageApi } from '../api/agenthub'
+import { AgentAvatar } from './AgentStatusSidebar'
 
 // VersionHistoryModal component
 function VersionHistoryModal({ message, onClose }) {
@@ -197,9 +198,15 @@ export default function MessageItem({ message, onPinMessage }) {
       <div className={`max-w-[70%] ${isUser ? 'order-2' : 'order-1'}`}>
         <div className="flex items-center gap-2 mb-1">
           {!isUser && (
-            <span className="text-sm font-medium text-primary-400">{message.senderName}</span>
+            <>
+              <AgentAvatar agent={{ name: message.senderName }} size="sm" showStatus={false} />
+              <span className="text-sm font-medium text-primary-400">{message.senderName}</span>
+            </>
           )}
-          <span className="text-xs text-gray-500">{formatTime(message.createdAt)}</span>
+          {isUser && (
+            <span className="text-xs text-gray-500 ml-auto">{formatTime(message.createdAt)}</span>
+          )}
+          {!isUser && <span className="text-xs text-gray-500">{formatTime(message.createdAt)}</span>}
           {!isUser && (
             <button
               onClick={() => setShowHistory(true)}
@@ -232,7 +239,7 @@ export default function MessageItem({ message, onPinMessage }) {
         <div
           className={`rounded-lg px-4 py-3 ${
             isUser ? 'bg-primary-600 text-white' : 'bg-gray-800 text-gray-200'
-          }`}
+          } ${isUser ? 'order-1' : 'order-2'}`}
         >
           <div className="chat-message-content">
             <ReactMarkdown
